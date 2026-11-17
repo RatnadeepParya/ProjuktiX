@@ -1,0 +1,62 @@
+name: "📚 Content & Curriculum Proposal"
+description: Propose a new technology track, encyclopedia chapter, question bank, or hands-on lab
+title: "[CONTENT]: "
+labels: ["content", "curriculum"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ProjuktiX is an open-source technical encyclopedia and learning platform. All educational content must be authoritative, comprehensive, original, and reference-backed (similar to the standard set by the Oracle DBA Encyclopedia reference).
+  - type: dropdown
+    id: domain
+    attributes:
+      label: Target Domain
+      description: Select the target technical domain.
+      options:
+        - "Programming Languages"
+        - "Frontend Engineering"
+        - "Backend Development and Frameworks"
+        - "Mobile Application Development"
+        - "Desktop Application Development"
+        - "Database Technologies"
+        - "Cloud Computing and Cloud Architecture"
+        - "DevOps and Site Reliability Engineering"
+        - "Operating Systems and Systems Engineering"
+        - "Computer Networks and Infrastructure"
+        - "Cybersecurity and Information Security"
+        - "Data Engineering and Big Data"
+        - "Artificial Intelligence, Machine Learning and Deep Learning"
+        - "Enterprise Systems and ERP"
+        - "Middleware and Enterprise Integration"
+        - "High Performance Computing and Distributed Systems"
+        - "Software Architecture and Engineering Design"
+        - "Quality Assurance and Test Automation"
+        - "Embedded Systems, Robotics and IoT"
+        - "Computer Hardware and Computer Architecture"
+        - "Quantum Computing"
+        - "Blockchain, Distributed Ledgers and Web3"
+        - "Computer Graphics, Game Development and Spatial Computing"
+        - "Specialized Technologies and Advanced Engineering Disciplines"
+    validations:
+      required: true
+  - type: input
+    id: technology
+    attributes:
+      label: Technology Name
+      description: Name of the technology (e.g. 'PostgreSQL', 'Rust', 'Terraform').
+    validations:
+      required: true
+  - type: textarea
+    id: syllabus
+    attributes:
+      label: Proposed Chapter or Topic Outline
+      description: Provide the detailed syllabus or topics you propose to author or import.
+    validations:
+      required: true
+  - type: textarea
+    id: references
+    attributes:
+      label: Official References & Source Material
+      description: List official documentation, whitepapers, or standards that support this content.
+    validations:
+      required: true

@@ -1,0 +1,46 @@
+name: "✨ Feature Request"
+description: Propose a new feature, component, or capability for ProjuktiX
+title: "[FEATURE]: "
+labels: ["enhancement", "proposal"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        We welcome proposals for expanding ProjuktiX! Please explain your motivation and describe the feature in detail.
+  - type: dropdown
+    id: category
+    attributes:
+      label: Feature Category
+      description: What area of the platform does this proposal improve?
+      options:
+        - "New Technology Track / Encyclopedia"
+        - "Universal Documentation Engine"
+        - "Assessment / Mock Exam System"
+        - "Hands-on Exercise & Lab Runner"
+        - "User Learning Dashboard & Badges"
+        - "Admin Portal & Content Ingestion"
+        - "Accessibility / Performance"
+        - "Other"
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem Statement
+      description: Is your feature request related to a problem or unmet learning need?
+    validations:
+      required: true
+  - type: textarea
+    id: proposed-solution
+    attributes:
+      label: Proposed Solution
+      description: Describe the solution you'd like to see implemented.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: Any alternative solutions or features you've considered.
+    validations:
+      required: false

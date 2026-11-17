@@ -1,0 +1,64 @@
+name: "🐛 Bug Report"
+description: File a bug report for ProjuktiX
+title: "[BUG]: "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report an issue! Please provide detailed information so we can reproduce and resolve it promptly.
+        **CRITICAL REMINDER**: NEVER include credentials, API keys, private keys, or `.env` file contents in this report.
+  - type: dropdown
+    id: component
+    attributes:
+      label: Affected Component
+      description: Which part of ProjuktiX is affected?
+      options:
+        - "Frontend (apps/web)"
+        - "Backend API (apps/api)"
+        - "Universal Documentation Engine"
+        - "Assessment & Question Bank Engine"
+        - "Hands-on Exercise Terminal"
+        - "Admin Portal"
+        - "Packages (@projuktix/types, shared, validation)"
+        - "Database / Firestore Rules"
+        - "CI/CD Pipeline"
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: Bug Description
+      description: A clear and concise description of what the bug is.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to Reproduce
+      description: Step-by-step instructions to reproduce the behavior.
+      placeholder: |
+        1. Go to '...'
+        2. Click on '....'
+        3. Scroll down to '....'
+        4. See error
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What you expected to happen.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment Info
+      description: Browser, OS, Node.js version, and screen resolution.
+      placeholder: |
+        - Browser: Chrome 124 / Firefox 125 / Safari 17
+        - OS: macOS / Linux / Windows
+        - Node: v20.x / pnpm: v11.x
+    validations:
+      required: false

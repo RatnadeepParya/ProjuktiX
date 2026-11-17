@@ -1,0 +1,233 @@
+name: ProjuktiX Continuous Deployment Pipeline
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # -------------------------------------------------------------
+  # STAGE 1: Full System Checks (Audit, Typecheck, Test, Build)
+  # -------------------------------------------------------------
+  validate-and-build:
+    name: 1. Full System Checks & Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Strict Zero-Secret Audit
+        run: |
+          echo "=== Auditing for prohibited credentials and environment files ==="
+          FOUND_LEAKS=0
+          if find . -name "*.env" -o -name ".env.*" -o -name "*.envrc" | grep -v "node_modules"; then
+            echo "::error::Prohibited environment file found! ProjuktiX strictly disallows any .env files."
+            FOUND_LEAKS=1
+          fi
+          if find . -name "*service-account*.json" -o -name "*service_account*.json" -o -name "*credentials*.json" -o -name "firebase-adminsdk*.json" | grep -v "node_modules"; then
+            echo "::error::Prohibited credential JSON file found!"
+            FOUND_LEAKS=1
+          fi
+          if find . -name "*.pem" -o -name "*.key" -o -name "*.p12" -o -name "id_rsa*" | grep -v "node_modules"; then
+            echo "::error::Prohibited private key file found!"
+            FOUND_LEAKS=1
+          fi
+          if [ $FOUND_LEAKS -ne 0 ]; then
+            exit 1
+          fi
+          echo "Zero-secret audit passed cleanly. No persistent secrets detected."
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.15.1
+          run_install: false
+
+      - name: Setup Node.js (LTS v22)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'pnpm'
+
+      - name: Install Monorepo Dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Production Packages & Web App
+        run: pnpm run build
+
+      - name: Typecheck All Packages
+        run: pnpm run typecheck
+
+      - name: Execute Vitest Test Suites
+        run: pnpm run test
+
+  # -------------------------------------------------------------
+  # STAGE 2: Firebase Push (Runs strictly AFTER Stage 1 passes)
+  # -------------------------------------------------------------
+  firebase-push:
+    name: 2. Deploy Firestore Rules & Indexes
+    runs-on: ubuntu-latest
+    needs: [validate-and-build]
+    env:
+      FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
+      FIREBASE_CLIENT_EMAIL: ${{ secrets.FIREBASE_CLIENT_EMAIL }}
+      FIREBASE_PRIVATE_KEY: ${{ secrets.FIREBASE_PRIVATE_KEY }}
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud & Firebase
+        if: env.FIREBASE_CLIENT_EMAIL != '' && env.FIREBASE_PRIVATE_KEY != ''
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: |
+            {
+              "type": "service_account",
+              "project_id": "${{ secrets.FIREBASE_PROJECT_ID }}",
+              "client_email": "${{ secrets.FIREBASE_CLIENT_EMAIL }}",
+              "private_key": ${{ toJson(secrets.FIREBASE_PRIVATE_KEY) }}
+            }
+
+      - name: Deploy Firestore Rules and Indexes
+        if: env.FIREBASE_CLIENT_EMAIL != '' && env.FIREBASE_PRIVATE_KEY != ''
+        run: |
+          echo "Deploying Firestore security rules and composite indexes..."
+          npx firebase-tools deploy --only firestore:rules,firestore:indexes --project "${{ secrets.FIREBASE_PROJECT_ID }}" --non-interactive
+
+  # -------------------------------------------------------------
+  # STAGE 3: Render Deploy (Runs strictly AFTER Stage 2 passes)
+  # -------------------------------------------------------------
+  deploy-to-render:
+    name: 3. Trigger & Verify Render Continuous Deployment
+    runs-on: ubuntu-latest
+    needs: [firebase-push]
+    env:
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+      WEB_SERVICE_ID: ${{ secrets.RENDER_WEB_SERVICE_ID }}
+      API_SERVICE_ID: ${{ secrets.RENDER_API_SERVICE_ID }}
+
+    steps:
+      - name: Dispatch Render Deployments and Wait for Live Status
+        run: |
+          python3 -c '
+          import os, sys, time, json, urllib.request
+
+          api_key = os.environ.get("RENDER_API_KEY")
+          if not api_key:
+              print("::error::RENDER_API_KEY secret is not set in repository secrets.")
+              sys.exit(1)
+
+          web_id = os.environ.get("WEB_SERVICE_ID")
+          api_id = os.environ.get("API_SERVICE_ID")
+          if not web_id or not api_id:
+              print("::error::RENDER_WEB_SERVICE_ID or RENDER_API_SERVICE_ID secret is missing.")
+              sys.exit(1)
+
+          def get_service_url(service_id):
+              req = urllib.request.Request(
+                  f"https://api.render.com/v1/services/{service_id}",
+                  headers={"Authorization": f"Bearer {api_key}", "Accept": "application/json"}
+              )
+              try:
+                  with urllib.request.urlopen(req) as resp:
+                      data = json.loads(resp.read().decode("utf-8"))
+                      return data.get("serviceDetails", {}).get("url", "")
+              except Exception:
+                  return ""
+
+          def trigger_deploy(service_id, service_name):
+              print(f"Dispatching Render deployment for {service_name}...")
+              req = urllib.request.Request(
+                  f"https://api.render.com/v1/services/{service_id}/deploys",
+                  data=json.dumps({"clearCache": "do_not_clear"}).encode("utf-8"),
+                  headers={
+                      "Authorization": f"Bearer {api_key}",
+                      "Content-Type": "application/json",
+                      "Accept": "application/json"
+                  },
+                  method="POST"
+              )
+              try:
+                  with urllib.request.urlopen(req) as resp:
+                      data = json.loads(resp.read().decode("utf-8"))
+                      deploy_id = data.get("id")
+                      print(f"  • {service_name}: Deployment queued (Deploy ID: {deploy_id})")
+                      return deploy_id
+              except urllib.error.HTTPError as e:
+                  print(f"::error::Failed to trigger {service_name} deploy: HTTP {e.code}")
+                  sys.exit(1)
+
+          def check_deploy(service_id, deploy_id):
+              req = urllib.request.Request(
+                  f"https://api.render.com/v1/services/{service_id}/deploys/{deploy_id}",
+                  headers={
+                      "Authorization": f"Bearer {api_key}",
+                      "Accept": "application/json"
+                  }
+              )
+              try:
+                  with urllib.request.urlopen(req) as resp:
+                      data = json.loads(resp.read().decode("utf-8"))
+                      return data.get("status", "unknown")
+              except Exception:
+                  return "checking"
+
+          # 1. Fetch URLs dynamically from Render
+          web_url = get_service_url(web_id)
+          api_url = get_service_url(api_id)
+
+          # 2. Trigger deploys in parallel
+          web_deploy_id = trigger_deploy(web_id, "projuktix-web")
+          api_deploy_id = trigger_deploy(api_id, "projuktix-api")
+
+          print("\n=== Waiting for Render deployments to become live ===")
+          start_time = time.time()
+          web_done = False
+          api_done = False
+          max_wait_seconds = 600  # 10 minutes timeout
+
+          while True:
+              elapsed = int(time.time() - start_time)
+              if elapsed > max_wait_seconds:
+                  print("::error::Deployment wait timed out after 10 minutes.")
+                  sys.exit(1)
+
+              if not web_done:
+                  web_status = check_deploy(web_id, web_deploy_id)
+                  if web_status == "live":
+                      web_done = True
+                      print(f"  ✅ [projuktix-web] Status: live (elapsed: {elapsed}s)")
+                  elif web_status in ["build_failed", "update_failed", "canceled", "deactivated"]:
+                      print(f"::error::projuktix-web deployment failed with status: {web_status}")
+                      sys.exit(1)
+
+              if not api_done:
+                  api_status = check_deploy(api_id, api_deploy_id)
+                  if api_status == "live":
+                      api_done = True
+                      print(f"  ✅ [projuktix-api] Status: live (elapsed: {elapsed}s)")
+                  elif api_status in ["build_failed", "update_failed", "canceled", "deactivated"]:
+                      print(f"::error::projuktix-api deployment failed with status: {api_status}")
+                      sys.exit(1)
+
+              if web_done and api_done:
+                  break
+
+              print(f"  ⏳ Deployment in progress... (elapsed: {elapsed}s)")
+              time.sleep(15)
+
+          print("\n" + "=" * 62)
+          print("🚀 PROJUKTIX FULL PRODUCTION DEPLOYMENT COMPLETE & VERIFIED")
+          print("=" * 62)
+          print(f"• Web App (Frontend SPA):   {web_url} [Status: live]")
+          print(f"• Backend REST API:         {api_url} [Status: live]")
+          print(f"• API Health Check:         {api_url}/health")
+          print(f"• Public Configuration:     {api_url}/api/v1/config")
+          print("=" * 62 + "\n")
+          '

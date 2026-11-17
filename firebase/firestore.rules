@@ -1,0 +1,142 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function hasAdminRole() {
+      return isAuthenticated() && 
+        (getUserData().role in ['super_admin', 'platform_admin', 'content_admin']);
+    }
+
+    // Default deny all access
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Public read-only educational content collections (when published)
+    match /domains/{domainId} {
+      allow read: if true;
+      allow write: if hasAdminRole();
+    }
+
+    match /technologies/{techId} {
+      allow read: if resource.data.status == 'published' || hasAdminRole();
+      allow write: if hasAdminRole();
+    }
+
+    match /courses/{courseId} {
+      allow read: if resource.data.status == 'published' || hasAdminRole();
+      allow write: if hasAdminRole();
+    }
+
+    match /chapters/{chapterId} {
+      allow read: if resource.data.status == 'published' || hasAdminRole();
+      allow write: if hasAdminRole();
+    }
+
+    match /lessons/{lessonId} {
+      allow read: if resource.data.status == 'published' || hasAdminRole();
+      allow write: if hasAdminRole();
+    }
+
+    match /lessonChunks/{chunkId} {
+      allow read: if true;
+      allow write: if hasAdminRole();
+    }
+
+    match /learningPaths/{pathId} {
+      allow read: if resource.data.status == 'published' || hasAdminRole();
+      allow write: if hasAdminRole();
+    }
+
+    // MCQ Questions: Public read only when published.
+    // Client receives options and prompt, NEVER answers.
+    match /mcqQuestions/{questionId} {
+      allow read: if resource.data.status == 'published' || hasAdminRole();
+      allow write: if hasAdminRole();
+    }
+
+    // STRICT ISOLATION: MCQ Answer Keys are strictly restricted to backend Admin SDK only!
+    // Direct client access is DENIED under all circumstances.
+    match /mcqAnswerKeys/{keyId} {
+      allow read, write: if false;
+    }
+
+    // Hands-on exercises
+    match /handsOnExercises/{exerciseId} {
+      allow read: if resource.data.status == 'published' || hasAdminRole();
+      allow write: if hasAdminRole();
+    }
+
+    // User profiles: Users can read their own profile, admins can read all
+    match /users/{userId} {
+      allow read: if isOwner(userId) || hasAdminRole();
+      // Users can only update their own display name, bio, and preferences (never role or permissions)
+      allow update: if isOwner(userId) && 
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'organizationId', 'isActive']);
+      allow create: if isOwner(userId);
+      allow delete: if hasAdminRole();
+    }
+
+    // User Progress, Bookmarks, and Notes
+    match /learningProgress/{progressId} {
+      allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || hasAdminRole());
+      allow write: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+    }
+
+    match /userBookmarks/{bookmarkId} {
+      allow read, write: if isAuthenticated() && 
+        (resource == null || resource.data.userId == request.auth.uid) &&
+        (request.resource == null || request.resource.data.userId == request.auth.uid);
+    }
+
+    match /userNotes/{noteId} {
+      allow read, write: if isAuthenticated() && 
+        (resource == null || resource.data.userId == request.auth.uid) &&
+        (request.resource == null || request.resource.data.userId == request.auth.uid);
+    }
+
+    // Assessment attempts: user can read their own attempts
+    match /assessmentAttempts/{attemptId} {
+      allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || hasAdminRole());
+      allow write: if false; // All attempt writes/evaluations go through the backend Express API!
+    }
+
+    // Exercise submissions: user can read their own submissions
+    match /exerciseSubmissions/{submissionId} {
+      allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || hasAdminRole());
+      allow write: if false; // All submission evaluation goes through backend Express API!
+    }
+
+    // Certificates: Publicly readable for verification
+    match /certificates/{certificateId} {
+      allow read: if true;
+      allow write: if false; // Only backend API can issue certificates
+    }
+
+    // Audit logs: Strictly protected, only backend API and auditors can read
+    match /auditLogs/{logId} {
+      allow read: if isAuthenticated() && (getUserData().role in ['super_admin', 'auditor']);
+      allow write: if false; // Append-only via backend Admin SDK
+    }
+
+    // Platform settings
+    match /platformSettings/{settingId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && getUserData().role == 'super_admin';
+    }
+  }
+}

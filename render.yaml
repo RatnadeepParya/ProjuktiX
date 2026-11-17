@@ -1,0 +1,51 @@
+# ProjuktiX Render Blueprint Specification
+# Enables continuous deployment for both Backend API and Frontend Web SPA on Git Push.
+
+services:
+  # 1. ProjuktiX Express REST API
+  - type: web
+    name: projuktix-api
+    runtime: node
+    plan: free
+    region: oregon
+    branch: main
+    autoDeploy: true
+    buildCommand: pnpm install --frozen-lockfile && pnpm --filter "@projuktix/types" run build && pnpm --filter "@projuktix/validation" run build && pnpm --filter "@projuktix/shared" run build && pnpm --filter "@projuktix/api" run build
+    startCommand: node apps/api/dist/index.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: CORS_ORIGIN
+        sync: false
+      - key: FIREBASE_PROJECT_ID
+        sync: false
+      - key: FIREBASE_CLIENT_EMAIL
+        sync: false
+      - key: FIREBASE_PRIVATE_KEY
+        sync: false
+
+  # 2. ProjuktiX React SPA (Web App)
+  - type: web
+    name: projuktix-web
+    runtime: static
+    branch: main
+    autoDeploy: true
+    buildCommand: pnpm install --frozen-lockfile && pnpm --filter "@projuktix/types" run build && pnpm --filter "@projuktix/validation" run build && pnpm --filter "@projuktix/shared" run build && pnpm --filter "@projuktix/web" run build
+    staticPublishPath: apps/web/dist
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: VITE_API_BASE_URL
+        sync: false
+      - key: VITE_FIREBASE_API_KEY
+        sync: false
+      - key: VITE_FIREBASE_AUTH_DOMAIN
+        sync: false
+      - key: VITE_FIREBASE_PROJECT_ID
+        sync: false
+      - key: VITE_FIREBASE_APP_ID
+        sync: false

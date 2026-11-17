@@ -1,0 +1,75 @@
+# ProjuktiX — Enterprise Master .gitignore
+# Strictly prevents any credential, secret, or environment files from being tracked.
+
+# Dependency directories
+node_modules/
+.pnpm-store/
+dist/
+build/
+coverage/
+.nyc_output/
+*.lcov
+
+# Build caches & logs
+.turbo/
+.cache/
+*.tsbuildinfo
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# STRICT ENVIRONMENT FILE PREVENTION (NO .env ALLOWED)
+.env
+.env.*
+*.env
+*.env.*
+*.environment
+*.envrc
+
+# STRICT CREDENTIAL & SECRET PREVENTION
+*.pem
+*.key
+*.cert
+*.crt
+*.pfx
+*.p12
+*.jks
+*service-account*.json
+*service_account*.json
+*serviceaccount*.json
+*credentials*.json
+*secret*.json
+*secret*.yaml
+*secret*.yml
+firebase-adminsdk*.json
+google-services*.json
+GoogleService-Info*.plist
+id_rsa
+id_ecdsa
+id_ed25519
+*.id_rsa
+
+# Firebase cache & emulators
+.firebase/
+firebase-debug.log*
+firestore-debug.log*
+ui-debug.log*
+
+# IDE & OS files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+*.swp
+*.swo
+*~
+
+# Temporary artifacts
+tmp/
+temp/
+scratch/
